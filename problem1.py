@@ -138,22 +138,20 @@ def run_problem1(spark: SparkSession) -> None:
     end_time = time.time()
     execution_time = end_time - start_time
     logger.info(f"Problem 3 execution completed in {execution_time:.2f} seconds")
-
+    
 
 def main():
     if len(sys.argv) < 2:
-        print("❌ Usage: python reddit_analysis_cluster.py spark://MASTER_PRIVATE_IP:7077")
+        print("❌ Usage: python problem1.py spark://MASTER_PRIVATE_IP:7077")
         return 1
     master_url = sys.argv[1]
     spark = create_spark_session(master_url)
-
     try:
         run_problem1(spark)
     except Exception as e:
-        logger.exception(f"Error during Reddit analysis: {e}")
-        print(f"Error: {e}")
+        logger.exception(f"Error during Log Level Distribution analysis: {e}")
+        print(f"❌ Error: {e}")
         return 1
-    
     finally:
         spark.stop()
     return 0
