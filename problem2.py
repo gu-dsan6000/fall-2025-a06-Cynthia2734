@@ -10,10 +10,12 @@ import logging
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import (
     col, input_file_name, regexp_extract, when, length, to_timestamp, lpad,
-    min as smin, max as smax, count as s_count, unix_timestamp, desc
+    min as smin, max as smax, count as s_count, unix_timestamp, desc, lit
 )
 import matplotlib.pyplot as plt
+import seaborn as sns
 import numpy as np
+from scipy.stats import gaussian_kde
 
 # Configure logging with basicConfig
 logging.basicConfig(
@@ -93,7 +95,7 @@ def run_problem2(spark: SparkSession) -> None:
 
     # 1. Time-series data for each application
     logger.info("Time-series data for each application")
-    print("[1/3] Time-series data for each application")
+    print("[1/5] Time-series data for each application")
     cand = regexp_extract(col("line"), r"(\d{2}/\d{2}/\d{2} \d{2}:\d{2}:\d{2})", 1)
     ts = to_timestamp(when(length(cand) > 0, cand), "yy/MM/dd HH:mm:ss")
     logs = df.withColumn("ts", ts)
@@ -108,7 +110,7 @@ def run_problem2(spark: SparkSession) -> None:
 
     # 2. Aggregated cluster statistics
     logger.info("Aggregated cluster statistics")
-    print("[2/3] Aggregated cluster statistics")
+    print("[2/5] Aggregated cluster statistics")
     
     cluster_summary = (
         timeseries.groupBy("cluster_id")
@@ -125,7 +127,7 @@ def run_problem2(spark: SparkSession) -> None:
 
     # 3. Overall summary statistics
     logger.info("Overall summary statistics")
-    print("[3/3] Overall summary statistics")
+    print("[3/5] Overall summary statistics")
     total_clusters = cluster_summary.count()
     total_apps = timeseries.count()
     avg_apps_per_cluster = (total_apps / total_clusters) if total_clusters else 0.0
@@ -147,33 +149,125 @@ def run_problem2(spark: SparkSession) -> None:
 
     # 4. Bar chart visualization
     logger.info("Bar chart visualization")
-    print("4/5] Bar chart visualization")
+    print("[4/5] Bar chart visualization")
     bar_chart_path = os.path.join(output_dir, "problem2_bar_chart.png")
-    plt.figure(figsize=(10, 16))
-    x = np.arange(len(cs_pdf))
-    y = cs_pdf["num_applications"].to_numpy()
-    cmap = plt.get_cmap("tab20")
-    colors = cmap(np.linspace(0, 1, len(cs_pdf)))
-    plt.bar(x, y, color=colors)
-    plt.xlabel("Cluster ID")
-    plt.ylabel("Number of Applications")
-    plt.title("Number of Applications per Cluster")
-    plt.xticks(x, cs_pdf["cluster_id"].astype(str), rotation=45, ha="right")
-    ax = plt.gca()
-    for xi, yi in zip(x, y):
-        ax.annotate(f"{int(yi)}",
-                    (xi, yi),
-                    ha="center", va="bottom",
-                    xytext=(0, 3), textcoords="offset points",
-                    fontsize=9)
+    plt.figure(figsize=(16, 10))
+    ax = sns.barplot(
+        data=cs_pdf,
+        x="cluster_id",
+        y="num_applications",
+        hue="cluster_id",
+        palette="tab20"
+    )
+    ax.set_xlabel("Cluster ID")
+    ax.set_ylabel("Number of Applications")
+    ax.set_title("Number of Applications per Cluster")
+    ax.set_xticklabels(cs_pdf["cluster_id"].astype(str), rotation=45, ha="right")
+    for p in ax.patches:
+        height = p.get_height()
+        ax.annotate(
+            f"{int(height)}",
+            (p.get_x() + p.get_width()/2, height),
+            ha="center", va="bottom",
+            xytext=(0, 3), textcoords="offset points", fontsize=9
+        )
     plt.tight_layout()
     plt.savefig(bar_chart_path, dpi=160)
     plt.close()
+    print(f"✅ Saved: {bar_chart_path}")
 
     # 5. Faceted density plot visualization
-    logger.info("Faceted density plot visualization")
-    print("5/5] Faceted density plot visualization")
+    # logger.info("Faceted density plot visualization")
+    # print("[5/5] Faceted density plot visualization")
+    # sns.set_theme(style="whitegrid")
+    # timeseries = timeseries.withColumn(
+    #     "duration_sec",
+    #     (unix_timestamp(col("end_time")) - unix_timestamp(col("start_time"))).cast("long")
+    # )
+    # largest_cluster_id = str(cs_pdf.iloc[0]["cluster_id"])
+    # dur_pdf = (
+    #     timeseries
+    #     .filter((col("cluster_id") == lit(largest_cluster_id)) &
+    #             col("duration_sec").isNotNull() &
+    #             (col("duration_sec") > 0))
+    #     .select("duration_sec")
+    #     .toPandas()
+    # )
     
+    # dur = dur_pdf["duration_sec"].astype(float).to_numpy()
+    # dur = dur[np.isfinite(dur)]
+    # dur = dur[(dur > 0)]
+    # bins = np.logspace(np.log10(dur.min()), np.log10(dur.max()), 40)
+    # density_plot_path = os.path.join(output_dir, "problem2_density_plot.png")
+    # plt.figure(figsize=(16, 10))
+    # sns.histplot(dur, bins=bins, kde=True, stat="count", color="skyblue", edgecolor="black")
+    # plt.xscale("log")
+    # plt.xlabel("Job Duration (seconds, log scale)")
+    # plt.ylabel("Count")
+    # plt.title(f"Duration distribution for Cluster {largest_cluster_id} (n={len(dur)})")
+    # plt.tight_layout()
+    # plt.savefig(density_plot_path, dpi=160)
+    # plt.close()
+    # print(f"✅ Saved: {density_plot_path}")
+    # 5. Faceted density plot visualization
+    logger.info("Faceted density plot visualization")
+    print("[5/5] Faceted density plot visualization")
+    sns.set_theme(style="whitegrid")
+    timeseries = timeseries.withColumn(
+        "duration_sec",
+        (unix_timestamp(col("end_time")) - unix_timestamp(col("start_time"))).cast("long")
+    )
+    largest_cluster_id = str(cs_pdf.iloc[0]["cluster_id"])
+    dur_pdf = (
+        timeseries
+        .filter((col("cluster_id") == lit(largest_cluster_id)) &
+                col("duration_sec").isNotNull() &
+                (col("duration_sec") > 0))
+        .select("duration_sec")
+        .toPandas()
+    )
+
+    dur = dur_pdf["duration_sec"].astype(float).to_numpy()
+    dur = dur[np.isfinite(dur)]
+    dur = dur[(dur > 0)]
+
+    # 对数等比分箱（你的配置保留）
+    bins = np.logspace(np.log10(dur.min()), np.log10(dur.max()), 40)
+    density_plot_path = os.path.join(output_dir, "problem2_density_plot.png")
+
+    plt.figure(figsize=(16, 10))
+    # 直方图保持“计数”尺度
+    sns.histplot(dur, bins=bins, stat="count", color="skyblue", edgecolor="black", alpha=0.6)
+
+    # --- 关键改动：在 log10 域做 KDE，并换算到“计数”尺度 ---
+    # log10(dur) 上的 KDE
+    logx = np.log10(dur)
+    kde_log = gaussian_kde(logx, bw_method="scott")
+
+    # 与直方图同范围的 log10 网格
+    log_edges = np.log10(bins)
+    logx_grid = np.linspace(log_edges.min(), log_edges.max(), 500)
+
+    # 每个 bin 的宽度在 log10 域是常数：Δlog10
+    delta_log10 = np.mean(np.diff(log_edges))
+
+    # 将 KDE 从“密度”换算到“计数”：
+    # counts(x) = KDE_log(log10 x) * n * Δlog10
+    counts_curve = kde_log(logx_grid) * len(dur) * delta_log10
+    x_grid = 10 ** logx_grid
+
+    # 画红线
+    plt.plot(x_grid, counts_curve, color="red", linewidth=2)
+
+    # 轴/标题
+    plt.xscale("log")
+    plt.xlabel("Job Duration (seconds, log scale)")
+    plt.ylabel("Count")
+    plt.title(f"Duration distribution for Cluster {largest_cluster_id} (n={len(dur)})")
+    plt.tight_layout()
+    plt.savefig(density_plot_path, dpi=160)
+    plt.close()
+    print(f"✅ Saved: {density_plot_path}")
 
     # Calculate execution time
     end_time = time.time()
