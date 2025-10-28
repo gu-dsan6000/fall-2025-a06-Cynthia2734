@@ -177,39 +177,6 @@ def run_problem2(spark: SparkSession) -> None:
     print(f"✅ Saved: {bar_chart_path}")
 
     # 5. Faceted density plot visualization
-    # logger.info("Faceted density plot visualization")
-    # print("[5/5] Faceted density plot visualization")
-    # sns.set_theme(style="whitegrid")
-    # timeseries = timeseries.withColumn(
-    #     "duration_sec",
-    #     (unix_timestamp(col("end_time")) - unix_timestamp(col("start_time"))).cast("long")
-    # )
-    # largest_cluster_id = str(cs_pdf.iloc[0]["cluster_id"])
-    # dur_pdf = (
-    #     timeseries
-    #     .filter((col("cluster_id") == lit(largest_cluster_id)) &
-    #             col("duration_sec").isNotNull() &
-    #             (col("duration_sec") > 0))
-    #     .select("duration_sec")
-    #     .toPandas()
-    # )
-    
-    # dur = dur_pdf["duration_sec"].astype(float).to_numpy()
-    # dur = dur[np.isfinite(dur)]
-    # dur = dur[(dur > 0)]
-    # bins = np.logspace(np.log10(dur.min()), np.log10(dur.max()), 40)
-    # density_plot_path = os.path.join(output_dir, "problem2_density_plot.png")
-    # plt.figure(figsize=(16, 10))
-    # sns.histplot(dur, bins=bins, kde=True, stat="count", color="skyblue", edgecolor="black")
-    # plt.xscale("log")
-    # plt.xlabel("Job Duration (seconds, log scale)")
-    # plt.ylabel("Count")
-    # plt.title(f"Duration distribution for Cluster {largest_cluster_id} (n={len(dur)})")
-    # plt.tight_layout()
-    # plt.savefig(density_plot_path, dpi=160)
-    # plt.close()
-    # print(f"✅ Saved: {density_plot_path}")
-    # 5. Faceted density plot visualization
     logger.info("Faceted density plot visualization")
     print("[5/5] Faceted density plot visualization")
     sns.set_theme(style="whitegrid")
@@ -226,40 +193,22 @@ def run_problem2(spark: SparkSession) -> None:
         .select("duration_sec")
         .toPandas()
     )
-
     dur = dur_pdf["duration_sec"].astype(float).to_numpy()
     dur = dur[np.isfinite(dur)]
     dur = dur[(dur > 0)]
-
-    # 对数等比分箱（你的配置保留）
     bins = np.logspace(np.log10(dur.min()), np.log10(dur.max()), 40)
     density_plot_path = os.path.join(output_dir, "problem2_density_plot.png")
 
     plt.figure(figsize=(16, 10))
-    # 直方图保持“计数”尺度
     sns.histplot(dur, bins=bins, stat="count", color="skyblue", edgecolor="black", alpha=0.6)
-
-    # --- 关键改动：在 log10 域做 KDE，并换算到“计数”尺度 ---
-    # log10(dur) 上的 KDE
     logx = np.log10(dur)
     kde_log = gaussian_kde(logx, bw_method="scott")
-
-    # 与直方图同范围的 log10 网格
     log_edges = np.log10(bins)
     logx_grid = np.linspace(log_edges.min(), log_edges.max(), 500)
-
-    # 每个 bin 的宽度在 log10 域是常数：Δlog10
     delta_log10 = np.mean(np.diff(log_edges))
-
-    # 将 KDE 从“密度”换算到“计数”：
-    # counts(x) = KDE_log(log10 x) * n * Δlog10
     counts_curve = kde_log(logx_grid) * len(dur) * delta_log10
     x_grid = 10 ** logx_grid
-
-    # 画红线
     plt.plot(x_grid, counts_curve, color="red", linewidth=2)
-
-    # 轴/标题
     plt.xscale("log")
     plt.xlabel("Job Duration (seconds, log scale)")
     plt.ylabel("Count")
