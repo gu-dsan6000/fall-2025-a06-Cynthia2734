@@ -197,17 +197,16 @@ def run_problem2(spark: SparkSession) -> None:
     dur = dur[np.isfinite(dur)]
     dur = dur[(dur > 0)]
     bins = np.logspace(np.log10(dur.min()), np.log10(dur.max()), 40)
-    density_plot_path = os.path.join(output_dir, "problem2_density_plot.png")
-
-    plt.figure(figsize=(16, 10))
-    sns.histplot(dur, bins=bins, stat="count", color="skyblue", edgecolor="black", alpha=0.6)
-    logx = np.log10(dur)
-    kde_log = gaussian_kde(logx, bw_method="scott")
+    kde_log = gaussian_kde(np.log10(dur), bw_method="scott")
     log_edges = np.log10(bins)
     logx_grid = np.linspace(log_edges.min(), log_edges.max(), 500)
     delta_log10 = np.mean(np.diff(log_edges))
     counts_curve = kde_log(logx_grid) * len(dur) * delta_log10
     x_grid = 10 ** logx_grid
+    density_plot_path = os.path.join(output_dir, "problem2_density_plot.png")
+
+    plt.figure(figsize=(16, 10))
+    sns.histplot(dur, bins=bins, stat="count", color="skyblue", edgecolor="black", alpha=0.6)
     plt.plot(x_grid, counts_curve, color="red", linewidth=2)
     plt.xscale("log")
     plt.xlabel("Job Duration (seconds, log scale)")
